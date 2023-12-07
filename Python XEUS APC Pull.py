@@ -51,42 +51,27 @@ def DataExtractFromXEUS():
         conn = PyUber.connect(datasource=site)
 
         myQuery='''
-        SELECT  DISTINCT 
-              facility AS facility
-             ,apc_object_name AS apc_object_name
-             ,To_Char(change_date,'yyyy-mm-dd hh24:mi:ss') AS change_date
-             ,operation AS operation
-             ,attribute_name AS attribute_name
-             ,attribute_value AS attribute_value
-             ,apc_job_id AS apc_job_id
-             FROM
-             (
-                 
-                 SELECT  
-                 fac.facility AS facility
-                 ,ah.apc_object_name AS apc_object_name
-                 ,ah.change_time AS change_date
-                 ,ah.operation AS operation
-                 ,ad.attribute_name AS attribute_name
-                 ,ad.attribute_value AS attribute_value
-                 ,ah.apc_job_id AS apc_job_id
-                 FROM 
-                 P_APC_Txn_Hist ah
-                 INNER JOIN P_APC_Txn_Data ad ON ad.apc_data_id = ah.apc_data_id
-                 CROSS JOIN F_FACILITY fac
-                 WHERE
-                 ah.last_version_flag = 'Y' 
-                 AND      ah.apc_object_type = 'LOT' 
-                 AND      ah.apc_object_name Like 'AEPCMC_LOT' 
-                 AND      ad.attribute_name In ('AREA','LOTID','ROUTE','PROCESS','OPERATION','MES_WAFER_IDS','MES_SLOTS','SLOTS','PROCESS_OPN','PRODGROUP','PRODUCT'
-                                                ,'SUBENTITY','SUBENTITIES','UPDATE_TIME','B_TOOL_PRIOR','B_TOOL_RS','B_TOOL','B_PART_PRIOR','B_PART_RS'
-                                                ,'B_PART','SETTING_USED','LOTSETTINGS','WAFERSETTINGS','FF_SUC','FB_SUC','CALCULATED_SETTING','OPENRUNS'
-                                                ,'OPENRUNS_PART','METROAVGBYWAFER','METROAVGLOT','TARGET','FB_METRODATA','FB_METRODATA_IDX','FB_TARGET'
-                                                ,'WAFERS1_ACT','WAFERS1_ACT_IDX','WAFERS2_ACT','WAFERS2_ACT_IDX','WAFERS3_ACT','WAFERS3_ACT_IDX','LAMBDA_TOOL_USED'
-                                                ,'LAMBDA_PART_USED','PM_COUNTER_PRIOR','PM_COUNTER','REFERENCE_SETTING','M_ETCHRATE','METRO_LOLIMIT','METRO_HILIMIT'
-                                                ,'BATCH_ID','RSTIME','SHORTWAFERIDS','CHAMBER','CHAMBER_IDX','VALIDDATA','APC_DATA_ID','UPTIME','METROAVG_CHBR'
-                                                ,'MACHINE', 'MOMLOT', 'SMTIME', 'LAMBDA_TOOL','LAMBDA_PART') 
-                                                 AND ah.change_time >= SYSDATE - 1)
+        select distinct ah.LOAD_DATE, fac.FACILITY ,ah.APC_OBJECT_NAME, ah.LOT, ah.OPERATION ,
+        VARCHAR(ah.ONLINE_ROW_ID) as ONLINE_ROW_ID, 
+        ad.ATTRIBUTE_NAME, ad.ATTRIBUTE_VALUE
+        
+        from P_APC_TXN_HIST  ah
+        inner join P_APC_TXN_DATA ad on ad.APC_DATA_ID = ah.APC_DATA_ID
+        CROSS JOIN F_FACILITY fac
+        
+        where ah.APC_OBJECT_NAME = 'AEPCMC_LOT'
+        and ah.APC_OBJECT_TYPE = 'LOT'
+        and ah.LAST_VERSION_FLAG = 'Y'
+        and ad.ATTRIBUTE_NAME In ('AREA','LOTID','ROUTE','PROCESS','OPERATION','MES_WAFER_IDS','MES_SLOTS','SLOTS','PROCESS_OPN','PRODGROUP','PRODUCT'
+                                                        ,'SUBENTITY','SUBENTITIES','UPDATE_TIME','B_TOOL_PRIOR','B_TOOL_RS','B_TOOL','B_PART_PRIOR','B_PART_RS'
+                                                        ,'B_PART','SETTING_USED','LOTSETTINGS','WAFERSETTINGS','FF_SUC','FB_SUC','CALCULATED_SETTING','OPENRUNS'
+                                                        ,'OPENRUNS_PART','METROAVGBYWAFER','METROAVGLOT','TARGET','FB_METRODATA','FB_METRODATA_IDX'
+                                                        ,'FB_METRODATA2','FB_METRODATA2_IDX','FB_METRODATA3','FB_METRODATA3_IDX','FB_TARGET'
+                                                        ,'WAFERS1_ACT','WAFERS1_ACT_IDX','WAFERS2_ACT','WAFERS2_ACT_IDX','WAFERS3_ACT','WAFERS3_ACT_IDX','LAMBDA_TOOL_USED'
+                                                        ,'LAMBDA_PART_USED','PM_COUNTER_PRIOR','PM_COUNTER','REFERENCE_SETTING','M_ETCHRATE','METRO_LOLIMIT','METRO_HILIMIT'
+                                                        ,'BATCH_ID','RSTIME','SHORTWAFERIDS','CHAMBER','CHAMBER_IDX','VALIDDATA','APC_DATA_ID','UPTIME','METROAVG_CHBR'
+                                                        ,'MACHINE', 'MOMLOT', 'SMTIME', 'LAMBDA_TOOL','LAMBDA_PART') 
+        and ah.LOAD_DATE >= SYSDATE - 2
     '''
     
         lotcursor = conn.execute(myQuery)
@@ -94,17 +79,19 @@ def DataExtractFromXEUS():
         print("Query Completed...!")
         site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)
    
-        combined_df = pd.concat([combined_df, site_df], axis = 0)
-    
+        combined_df = pd.concat([combined_df, site_df], axis = 0)           
     return  combined_df
 
 def PivotRawData(df):
-    df.fillna('[NULL]', inplace=True) #fill empty cells with strings
-    index_col = ['FACILITY','APC_OBJECT_NAME','CHANGE_DATE','OPERATION','APC_JOB_ID']
-    df_pivot = df.pivot_table(index = index_col , columns = 'ATTRIBUTE_NAME', values = 'ATTRIBUTE_VALUE', aggfunc=lambda x: ' '.join(x)) 
-    df_pivot.drop_duplicates(keep = 'first', inplace = True)
-    
-    return df_pivot
+   df.fillna('[NULL]', inplace=True) #fill empty cells with strings
+   columns = df.columns
+   index_col = columns.drop(['ATTRIBUTE_NAME', 'ATTRIBUTE_VALUE']).to_list()
+
+   df_pivot = df.pivot_table(index = index_col , columns = 'ATTRIBUTE_NAME', values = 'ATTRIBUTE_VALUE', aggfunc=lambda x: ' '.join(str(v) for v in x)) 
+   df_pivot.drop_duplicates(keep = 'first', inplace = True)
+   df_pivot.reset_index(inplace = True)
+   
+   return df_pivot
 
 def DataQualityChecks(df_pivot):
     empty_slots = df_pivot[df_pivot['MES_SLOTS'].isnull()].index.tolist()
@@ -116,11 +103,13 @@ def DataQualityChecks(df_pivot):
     empty_batch_id = df_pivot[df_pivot['BATCH_ID'].isnull()].index.tolist()
     print("total empty batch id rows:", len(empty_batch_id))
     
-    #removing rows with empty batch id and chambers
+  
+    # #removing rows with empty batch id and chambers
     df_pivot_checked = df_pivot
     df_pivot_checked.dropna(subset = ['BATCH_ID'], inplace = True)
     df_pivot_checked.drop(df_pivot[df_pivot.CHAMBER == '[NULL]'].index, inplace = True)
     
+      
     #key definition for parsing
     df_pivot_checked['KEY'] = df_pivot_checked['BATCH_ID'] + "_" + df_pivot_checked['SUBENTITY']
     df_pivot.fillna('[NULL]', inplace=True)
@@ -128,7 +117,20 @@ def DataQualityChecks(df_pivot):
     #Need to check if any UPTIME empty cells
     
     return df_pivot_checked
- 
+
+def WaferChamberAssociation(CHAMBER,MES_SLOTS,SUBENTITY):
+    underscore = SUBENTITY.find('_')
+    SUBENTITY3 = SUBENTITY[underscore+1:]
+    
+    CHAMBER_LIST = CHAMBER.split(',')
+    MES_SLOTS_LIST = MES_SLOTS.split(',')
+        
+    CHAMBERS_SLOTS = [MES_SLOTS_LIST[idx] for idx, chamber in enumerate(CHAMBER_LIST) if chamber == SUBENTITY3]
+    
+    
+    return CHAMBERS_SLOTS
+    
+
 def WafersACTValuesBySlot(PC_MES_SLOTS, WAFERS_ACT, WAFERS_ACT_IDX, uptime):    
     result = []
     if uptime != '[NULL]':
@@ -176,27 +178,15 @@ def WaferLevelData(df):
     #####New addition for debug
     WLV['AREA'] = df['AREA']
     WLV['BATCH_ID'] = df['BATCH_ID']
+    WLV['OPERATION'] = df['OPERATION']
     ##################################
     
-    mes_slots , mes_wid=  df['MES_SLOTS'].split(',') , df['MES_WAFER_IDS'].split(',')
-    #This can be local variable
-    #WLV['MES_SLOTS'] = mes_slots
     
+    #####################################  Wafer Chamber Association #################################
     
-    chambers_list_by_slot = df['CHAMBER'].split(',') #list of all chambers by MES slots. In MC process contains multiple chambers
-    if chambers_list_by_slot[0] == '[NULL]': #this case probably single chamber process        
-        chamber_by_slot = [WLV['subentity_3']]*len(mes_slots) #to treat single chamber process when CHAMBER column is empty
-    else:
-        chamber_by_slot =  chambers_list_by_slot
-    
-    #Calculation slots and wafers per defined chamber
-    pc_indices = [i for i, chamber in enumerate(chamber_by_slot) if chamber == WLV['subentity_3']]
-    
-    WLV['PC_MES_SLOT'] = [mes_slots[i] for i in pc_indices] #This variable should be local post debug
-    WLV['PC_WID'] = [mes_wid[i] for i in pc_indices] #This variable should be local post debug
-
-
-
+    WLV['PC_MES_SLOTS_DEBUG'] = WaferChamberAssociation(df['CHAMBER'],df['MES_SLOTS'],df['SUBENTITY'])
+    WLV['PC_WID'] = WaferChamberAssociation(df['CHAMBER'],df['MES_WAFER_IDS'],df['SUBENTITY'])
+  
 ############################   New FB Metro Parsing #####################################################
     fb_metro_d = df['FB_METRODATA'].split(",")
     fb_metro_idx = df['FB_METRODATA_IDX'].split(";")
@@ -218,7 +208,7 @@ def WaferLevelData(df):
     #WLV['Slot Metro Data'] = slot_metro
     
     WLV['PC_METRO_DATA'] = []
-    for pc_slot in WLV['PC_MES_SLOT']:
+    for pc_slot in WLV['PC_MES_SLOTS_DEBUG']:
         if pc_slot in slot_metro:
             WLV['PC_METRO_DATA'].append(slot_metro[pc_slot])
         else:
@@ -226,7 +216,13 @@ def WaferLevelData(df):
         
     
     ##############################  APC settings conversion by lot ###################
-    WLV['B_PART'], WLV['B_PART_1'], WLV['B_PART_2'], WLV['B_PART_3'],WLV['B_PART_4'],WLV['B_PART_5'],WLV['B_PART_6'],WLV['B_PART_7']= ColumnDecomposition(df['B_PART'], 'B_PART')
+    try: 
+        WLV['B_PART'], WLV['B_PART_1'], WLV['B_PART_2'], WLV['B_PART_3'],WLV['B_PART_4'],WLV['B_PART_5'],WLV['B_PART_6'],WLV['B_PART_7']= ColumnDecomposition(df['B_PART'], 'B_PART')
+    except TypeError:
+        print(df['KEY'])
+        print(df['B_PART'])
+        
+        
     WLV['B_TOOL'], WLV['B_TOOL_1'], WLV['B_TOOL_2'], WLV['B_TOOL_3'],WLV['B_TOOL_4'],WLV['B_TOOL_5'],WLV['B_TOOL_6'],WLV['B_TOOL_7']= ColumnDecomposition(df['B_TOOL'], 'B_TOOL')
     WLV['B_PART_PRIOR'], WLV['B_PART_PRIOR_1'], WLV['B_PART_PRIOR_2'], WLV['B_PART_PRIOR_3'],WLV['B_PART_PRIOR_4'],WLV['B_PART_PRIOR_5'],WLV['B_PART_PRIOR_6'],WLV['B_PART_PRIOR_7']= ColumnDecomposition(df['B_PART_PRIOR'], 'B_PART_PRIOR')
     try: 
@@ -258,9 +254,9 @@ def WaferLevelData(df):
         wfr3_act_idx = []
         
    
-    WLV['WFR1_ACT_BY_SLOT'] = WafersACTValuesBySlot(WLV['PC_MES_SLOT'],  wfr1_act, wfr1_act_idx, df['UPTIME'])
-    WLV['WFR2_ACT_BY_SLOT'] = WafersACTValuesBySlot(WLV['PC_MES_SLOT'],  wfr2_act, wfr2_act_idx, df['UPTIME'])
-    WLV['WFR3_ACT_BY_SLOT'] = WafersACTValuesBySlot(WLV['PC_MES_SLOT'],  wfr3_act, wfr3_act_idx, df['UPTIME'])
+    WLV['WFR1_ACT_BY_SLOT'] = WafersACTValuesBySlot(WLV['PC_MES_SLOTS_DEBUG'],  wfr1_act, wfr1_act_idx, df['UPTIME'])
+    WLV['WFR2_ACT_BY_SLOT'] = WafersACTValuesBySlot(WLV['PC_MES_SLOTS_DEBUG'],  wfr2_act, wfr2_act_idx, df['UPTIME'])
+    WLV['WFR3_ACT_BY_SLOT'] = WafersACTValuesBySlot(WLV['PC_MES_SLOTS_DEBUG'],  wfr3_act, wfr3_act_idx, df['UPTIME'])
              
 
     return WLV
@@ -278,14 +274,15 @@ def WaferLevelDataConstruction(wlv_lst):
     
 ###### Real Time Data Extract ##################
 DF = DataExtractFromXEUS()
-DF.to_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/RawExtractData.csv")
+DF.to_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/RawExtractData.csv", index = False)
 ########################################################################################################################
 # DF = pd.read_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/RawExtractData.csv")
 now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
 print(f"Starting Pivot  {now}")
 DF_pivot = PivotRawData(DF)
 now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
-print(f"Starting Quality Check  {now}")
+#######################  NEED VALIDATION #################################################################################
+#print(f"Starting Quality Check  {now}")
 DF_Pivot_Checked = DataQualityChecks(DF_pivot)
 now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
 print(f"Saving raw data to SD  {now}")
@@ -299,12 +296,4 @@ WLV_data = WaferLevelDataConstruction(df_wlv)
 WLV_data.to_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/FinalWaferLevelData.csv", index = False)
 
 
-
-
-
-
-
-
-#output_file = Path("\\ORshfs.intel.com\ORanalysis$\1274_MAODATA\GAJT\WIJT\ByPath\GER_fdoktorm\APC_Data_extract.csv") #not working due to special char
-#DF_pivot.to_csv(output_file)
 
