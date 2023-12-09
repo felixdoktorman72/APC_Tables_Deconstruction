@@ -8,9 +8,9 @@ Created on Thu Nov 16 16:15:24 2023
 import PyUber
 import pandas as pd
 import numpy as np
-from pathlib import Path
+#from pathlib import Path
 import datetime
-# import json
+
 
 
 #Output path need to define function
@@ -71,7 +71,7 @@ def DataExtractFromXEUS():
                                                         ,'LAMBDA_PART_USED','PM_COUNTER_PRIOR','PM_COUNTER','REFERENCE_SETTING','M_ETCHRATE','METRO_LOLIMIT','METRO_HILIMIT'
                                                         ,'BATCH_ID','RSTIME','SHORTWAFERIDS','CHAMBER','CHAMBER_IDX','VALIDDATA','APC_DATA_ID','UPTIME','METROAVG_CHBR'
                                                         ,'MACHINE', 'MOMLOT', 'SMTIME', 'LAMBDA_TOOL','LAMBDA_PART') 
-        and ah.LOAD_DATE >= SYSDATE - 2
+        and ah.LOAD_DATE >= SYSDATE - 0.5
     '''
     
         lotcursor = conn.execute(myQuery)
@@ -118,6 +118,8 @@ def DataQualityChecks(df_pivot):
     
     return df_pivot_checked
 
+
+#######################  NEED To change ##################################################
 def WaferChamberAssociation(CHAMBER,MES_SLOTS,SUBENTITY):
     underscore = SUBENTITY.find('_')
     SUBENTITY3 = SUBENTITY[underscore+1:]
@@ -128,8 +130,9 @@ def WaferChamberAssociation(CHAMBER,MES_SLOTS,SUBENTITY):
     CHAMBERS_SLOTS = [MES_SLOTS_LIST[idx] for idx, chamber in enumerate(CHAMBER_LIST) if chamber == SUBENTITY3]
     
     
-    return CHAMBERS_SLOTS
-    
+    return CHAMBERS_SLOTS    
+
+#########################################################################
 
 def WafersACTValuesBySlot(PC_MES_SLOTS, WAFERS_ACT, WAFERS_ACT_IDX, uptime):    
     result = []
@@ -152,7 +155,6 @@ def WafersACTValuesBySlot(PC_MES_SLOTS, WAFERS_ACT, WAFERS_ACT_IDX, uptime):
         result = ['']*len(PC_MES_SLOTS)
         
     return result  
-
    
 def WaferLevelData(df):
     
@@ -175,19 +177,16 @@ def WaferLevelData(df):
     WLV['subentity'] = df['SUBENTITY']
     WLV['subentity_3'] = WLV['subentity'][-3:]
     WLV['CHAMBERS_LIST'] = df['CHAMBER']
-    #####New addition for debug
     WLV['AREA'] = df['AREA']
     WLV['BATCH_ID'] = df['BATCH_ID']
     WLV['OPERATION'] = df['OPERATION']
-    ##################################
-    
     
     #####################################  Wafer Chamber Association #################################
     
     WLV['PC_MES_SLOTS_DEBUG'] = WaferChamberAssociation(df['CHAMBER'],df['MES_SLOTS'],df['SUBENTITY'])
     WLV['PC_WID'] = WaferChamberAssociation(df['CHAMBER'],df['MES_WAFER_IDS'],df['SUBENTITY'])
   
-############################   New FB Metro Parsing #####################################################
+    #########################   New FB Metro Parsing #####################################################
     fb_metro_d = df['FB_METRODATA'].split(",")
     fb_metro_idx = df['FB_METRODATA_IDX'].split(";")
     
@@ -261,22 +260,20 @@ def WaferLevelData(df):
 
     return WLV
 
-
-
 def WaferLevelDataConstruction(wlv_lst):
     wafer_level_long_df = pd.DataFrame()
     
     for item in wlv_lst:
         temp_df = pd.DataFrame(item)    
         wafer_level_long_df = pd.concat([wafer_level_long_df,temp_df], ignore_index=True)
-    return wafer_level_long_df
+    return wafer_level_long_df    
 
     
 ###### Real Time Data Extract ##################
 DF = DataExtractFromXEUS()
-DF.to_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/RawExtractData.csv", index = False)
+#DF.to_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/RawExtractData.csv", index = False)
 ########################################################################################################################
-# DF = pd.read_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/RawExtractData.csv")
+#DF = pd.read_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/RawExtractData.csv")
 now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
 print(f"Starting Pivot  {now}")
 DF_pivot = PivotRawData(DF)
@@ -286,7 +283,7 @@ now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")
 DF_Pivot_Checked = DataQualityChecks(DF_pivot)
 now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
 print(f"Saving raw data to SD  {now}")
-DF_Pivot_Checked.to_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/LotLevelValidationvsUI.csv", index = False)
+#DF_Pivot_Checked.to_csv("//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/LotLevelValidationvsUI.csv", index = False)
 now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
 print(f"Starting WLV data parsing  {now}")
 df_wlv = list(DF_Pivot_Checked.apply(WaferLevelData, axis = 1))
