@@ -43,7 +43,7 @@ def ColumnDecomposition(column, column_name):
         
 def DataExtractFromXEUS():
     #Connection sites definition
-    sites = ["F28_PROD_XEUS", "F32_PROD_XEUS"]
+    sites = ["F28_PROD_XEUS"]#, "F32_PROD_XEUS"]
     combined_df = pd.DataFrame()
     for site in sites:
         now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
@@ -71,7 +71,7 @@ def DataExtractFromXEUS():
                                                         ,'LAMBDA_PART_USED','PM_COUNTER_PRIOR','PM_COUNTER','REFERENCE_SETTING','M_ETCHRATE','METRO_LOLIMIT','METRO_HILIMIT'
                                                         ,'BATCH_ID','RSTIME','SHORTWAFERIDS','CHAMBER','CHAMBER_IDX','VALIDDATA','APC_DATA_ID','UPTIME','METROAVG_CHBR'
                                                         ,'MACHINE', 'MOMLOT', 'SMTIME', 'LAMBDA_TOOL','LAMBDA_PART') 
-        and ah.LOAD_DATE >= SYSDATE - 60
+        and ah.LOAD_DATE >= SYSDATE - 45
     '''
         lotcursor = conn.execute(myQuery)
         field_name = [field[0] for field in lotcursor.description]      
@@ -107,13 +107,16 @@ def DataQualityChecks(df_pivot):
     df_pivot_checked.dropna(subset = ['BATCH_ID'], inplace = True)
     
     # Remove rows with [NULL] or None in the 'CHAMBER' column
-    df_pivot_checked = df_pivot_checked[df_pivot_checked['CHAMBER'].notna() & (df_pivot_checked['CHAMBER'] != '[NULL]')]
+    df_pivot_checked = df_pivot_checked[df_pivot_checked['CHAMBER'].notna() & 
+                                        df_pivot_checked['CHAMBER'].notnull()&
+                                        (df_pivot_checked['CHAMBER'] != '[NULL]')]
       
     #key definition for parsing
-    df_pivot_checked['KEY'] = df_pivot_checked['BATCH_ID'] + "_" + df_pivot_checked['SUBENTITY']
+    #df_pivot_checked['KEY'] = df_pivot_checked['BATCH_ID'] + "_" + df_pivot_checked['SUBENTITY']
+    df_pivot_checked['KEY'] = df_pivot_checked['BATCH_ID'].str.cat(df_pivot_checked['SUBENTITY'], sep = '_')
     #df_pivot.fillna('[NULL]', inplace=True)
     
-    #Need to check if any UPTIME empty cells
+   
     
     return df_pivot_checked
 
@@ -338,20 +341,20 @@ timestamp = Timestamp()
 print(f"WLV data parsing done {timestamp}")
 
 
-# Data Saving in Shared Location
+#Data Saving in Shared Location
 
-# timestamp = Timestamp() 
-# print(f"Saving raw data to SD  {timestamp}")
-# DF_Pivot_Checked.to_csv(output_path+"LotLevelValidationvsUI.csv", index = False)
-# timestamp = Timestamp() 
-# print(f"Raw data to SD saved  {timestamp}")
+timestamp = Timestamp() 
+print(f"Saving raw data to SD  {timestamp}")
+DF_Pivot_Checked.to_csv(output_path+"LotLevelValidationvsUI.csv", index = False)
+timestamp = Timestamp() 
+print(f"Raw data to SD saved  {timestamp}")
 
 
-# timestamp = Timestamp() 
-# print(f"Saving WLV data to SD {timestamp}")
-# WLV_data.to_csv(output_path+"FinalWaferLevelData.csv", index = False)
-# timestamp = Timestamp() 
-# print(f"Saving WLV data to SD done {timestamp}")
+timestamp = Timestamp() 
+print(f"Saving WLV data to SD {timestamp}")
+WLV_data.to_csv(output_path+"FinalWaferLevelData.csv", index = False)
+timestamp = Timestamp() 
+print(f"Saving WLV data to SD done {timestamp}")
 
 
 WLV_data = ParquetPrep(WLV_data)
