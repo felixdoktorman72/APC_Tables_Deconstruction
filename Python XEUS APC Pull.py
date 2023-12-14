@@ -43,7 +43,7 @@ def ColumnDecomposition(column, column_name):
         
 def DataExtractFromXEUS():
     #Connection sites definition
-    sites = ["F28_PROD_XEUS"]#, "F32_PROD_XEUS"]
+    sites = ["F28_PROD_XEUS", "F32_PROD_XEUS"]
     combined_df = pd.DataFrame()
     for site in sites:
         now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
@@ -71,12 +71,13 @@ def DataExtractFromXEUS():
                                                         ,'LAMBDA_PART_USED','PM_COUNTER_PRIOR','PM_COUNTER','REFERENCE_SETTING','M_ETCHRATE','METRO_LOLIMIT','METRO_HILIMIT'
                                                         ,'BATCH_ID','RSTIME','SHORTWAFERIDS','CHAMBER','CHAMBER_IDX','VALIDDATA','APC_DATA_ID','UPTIME','METROAVG_CHBR'
                                                         ,'MACHINE', 'MOMLOT', 'SMTIME', 'LAMBDA_TOOL','LAMBDA_PART') 
-        and ah.LOAD_DATE >= SYSDATE - 45
+        and ah.LOAD_DATE >= SYSDATE - 60
     '''
         lotcursor = conn.execute(myQuery)
         field_name = [field[0] for field in lotcursor.description]      
         site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)
-        print("Query Completed...!")
+        now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
+        print(f"PyUBER Extract Completed...! {now}")
         combined_df = pd.concat([combined_df, site_df], axis = 0)           
     return  combined_df
 
@@ -92,14 +93,14 @@ def PivotRawData(df):
    return df_pivot
 
 def DataQualityChecks(df_pivot):
-    empty_slots = df_pivot[df_pivot['MES_SLOTS'].isnull()].index.tolist()
-    print("empty slots are: ",empty_slots)
+    # empty_slots = df_pivot[df_pivot['MES_SLOTS'].isnull()].index.tolist()
+    # print("empty slots are: ",empty_slots)
     
-    empty_chambers = df_pivot[df_pivot['CHAMBER'] == '[NULL]'].index.tolist()
-    print("empty chambers are: ", len(empty_chambers))
+    # empty_chambers = df_pivot[df_pivot['CHAMBER'] == '[NULL]'].index.tolist()
+    # print("empty chambers are: ", len(empty_chambers))
     
-    empty_batch_id = df_pivot[df_pivot['BATCH_ID'].isnull()].index.tolist()
-    print("total empty batch id rows:", len(empty_batch_id))
+    # empty_batch_id = df_pivot[df_pivot['BATCH_ID'].isnull()].index.tolist()
+    # print("total empty batch id rows:", len(empty_batch_id))
     
   
     # #removing rows with empty batch id and chambers
@@ -109,7 +110,8 @@ def DataQualityChecks(df_pivot):
     # Remove rows with [NULL] or None in the 'CHAMBER' column
     df_pivot_checked = df_pivot_checked[df_pivot_checked['CHAMBER'].notna() & 
                                         df_pivot_checked['CHAMBER'].notnull()&
-                                        (df_pivot_checked['CHAMBER'] != '[NULL]')]
+                                        (df_pivot_checked['CHAMBER'] != '[NULL]') &
+                                        (df_pivot_checked['CHAMBER'] != 'NONE') ]
       
     #key definition for parsing
     #df_pivot_checked['KEY'] = df_pivot_checked['BATCH_ID'] + "_" + df_pivot_checked['SUBENTITY']
@@ -317,37 +319,37 @@ DF = DataExtractFromXEUS()
 # DF = pd.read_csv(output_path+"RawExtractData.csv")
 
 timestamp = Timestamp()   
-print(f"Starting Pivot  {timestamp}")
+#print(f"Starting Pivot  {timestamp}")
 DF_pivot = PivotRawData(DF)
 timestamp = Timestamp()   
-print(f"Pivot Ended  {timestamp}")
+#print(f"Pivot Ended  {timestamp}")
 
 timestamp = Timestamp()
-print(f"Starting Quality Check  {timestamp}")
+#print(f"Starting Quality Check  {timestamp}")
 DF_Pivot_Checked = DataQualityChecks(DF_pivot)
 timestamp = Timestamp()
-print(f"Quality Check Done {timestamp}")
+#print(f"Quality Check Done {timestamp}")
 
 timestamp = Timestamp() 
-print(f"Starting Pivot Checking {timestamp}")
+#print(f"Starting Pivot Checking {timestamp}")
 df_wlv = list(DF_Pivot_Checked.apply(WaferLevelData, axis = 1))
 timestamp = Timestamp() 
-print(f"Pivot Checking Done {timestamp}")
+#print(f"Pivot Checking Done {timestamp}")
 
 timestamp = Timestamp() 
-print(f"Starting WLV data parsing {timestamp}")
+#print(f"Starting WLV data parsing {timestamp}")
 WLV_data = WaferLevelDataConstruction(df_wlv)
 timestamp = Timestamp() 
-print(f"WLV data parsing done {timestamp}")
+#print(f"WLV data parsing done {timestamp}")
 
 
 #Data Saving in Shared Location
 
-timestamp = Timestamp() 
-print(f"Saving raw data to SD  {timestamp}")
-DF_Pivot_Checked.to_csv(output_path+"LotLevelValidationvsUI.csv", index = False)
-timestamp = Timestamp() 
-print(f"Raw data to SD saved  {timestamp}")
+# timestamp = Timestamp() 
+# print(f"Saving raw data to SD  {timestamp}")
+# DF_Pivot_Checked.to_csv(output_path+"LotLevelValidationvsUI.csv", index = False)
+# timestamp = Timestamp() 
+# print(f"Raw data to SD saved  {timestamp}")
 
 
 timestamp = Timestamp() 
