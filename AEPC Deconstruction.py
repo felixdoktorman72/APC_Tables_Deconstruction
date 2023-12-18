@@ -56,10 +56,10 @@ def DataExtractFromXEUS():
                                                         ,'LAMBDA_PART_USED','PM_COUNTER_PRIOR','PM_COUNTER','REFERENCE_SETTING','M_ETCHRATE','METRO_LOLIMIT','METRO_HILIMIT'
                                                         ,'BATCH_ID','RSTIME','SHORTWAFERIDS','CHAMBER','CHAMBER_IDX','VALIDDATA','APC_DATA_ID','UPTIME','METROAVG_CHBR'
                                                         ,'MACHINE', 'MOMLOT', 'SMTIME', 'LAMBDA_TOOL','LAMBDA_PART') 
-        and ah.LOAD_DATE >= SYSDATE - 1
+        and ah.LOAD_DATE >= SYSDATE - :days_back
     '''
     
-        lotcursor = conn.execute(myQuery)
+        lotcursor = conn.execute(myQuery, days_back = 18)
         field_name = [field[0] for field in lotcursor.description]
         #print("Query Completed...!")
         site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)   
