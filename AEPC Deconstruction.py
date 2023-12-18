@@ -9,7 +9,8 @@ import PyUber
 import pandas as pd
 import numpy as np
 #from pathlib import Path
-import datetime
+from datetime import datetime  
+from collections import Counter
 import logging
 
 # Create a custom logger
@@ -55,7 +56,7 @@ def DataExtractFromXEUS():
                                                         ,'LAMBDA_PART_USED','PM_COUNTER_PRIOR','PM_COUNTER','REFERENCE_SETTING','M_ETCHRATE','METRO_LOLIMIT','METRO_HILIMIT'
                                                         ,'BATCH_ID','RSTIME','SHORTWAFERIDS','CHAMBER','CHAMBER_IDX','VALIDDATA','APC_DATA_ID','UPTIME','METROAVG_CHBR'
                                                         ,'MACHINE', 'MOMLOT', 'SMTIME', 'LAMBDA_TOOL','LAMBDA_PART') 
-        and ah.LOAD_DATE >= SYSDATE - 3
+        and ah.LOAD_DATE >= SYSDATE - 1
     '''
     
         lotcursor = conn.execute(myQuery)
@@ -147,6 +148,108 @@ def add_WAFERSx_ACT_data(new_df):
                     new_df.at[row_index, key] = np.nan 
                     new_df.at[row_index, dic_to_parse[key]] = np.nan 
     return new_df
+
+# Format SPC metro data to add two new columes (in below) to data table.
+# 1) list of number of sites for each measurement. 
+# 2) list of slots having metro for each measurement.
+def add_fb_metrodatax_data(new_df):
+    list_fb_metrodatax_to_split = ['FB_METRODATA3', 'FB_METRODATA2', 'FB_METRODATA'] 
+    for fb_metrodatax in list_fb_metrodatax_to_split:
+        if fb_metrodatax in new_df.columns.to_list():
+            # variable names
+            fb_metrodatax_idx = fb_metrodatax + '_IDX'
+            fb_metrodatax_idx_num_meas = fb_metrodatax_idx + '_num_meas'  # FB_METRODATAx_IDX_num_meas (will add to table)
+            fb_metrodatax_idx_slot = fb_metrodatax + '_slot'              # FB_METRODATAx_slot (will add to table)
+            # get list of number of sites for each measurement
+            new_df[fb_metrodatax_idx_num_meas] = new_df[fb_metrodatax_idx]
+            new_df[fb_metrodatax_idx_num_meas] = new_df[fb_metrodatax_idx_num_meas].apply(lambda x: x.split(';') if isinstance(x, str) else x) 
+            new_df[fb_metrodatax_idx_num_meas] = new_df[fb_metrodatax_idx_num_meas].apply(lambda x: list(Counter(list([int(j.split(',')[0]) if j not in ['nan', '[NULL]'] else np.nan for j in x])).values()) if isinstance(x, list) else x)
+            # get list of slots having metro for each measurement.
+            new_df[fb_metrodatax_idx_slot] = new_df[fb_metrodatax_idx].apply(lambda x: x.split(';') if isinstance(x, str) else x)
+            new_df[fb_metrodatax_idx_slot] = new_df[fb_metrodatax_idx_slot].apply(lambda x: list(dict.fromkeys([int(j.split(',')[0]) if j not in ['nan', '[NULL]'] else np.nan for j in x])) if isinstance(x, list) else x)
+    return new_df 
+
+# Process FB_METRODATAx to make it wafer level.
+def process_fb_metrodatax_data(new_df):
+    # dic ('FB_METRODATAx':'FB_METRODATAx_IDX_num_meas') that required to parse.
+    dic = {'FB_METRODATA':'FB_METRODATA_IDX_num_meas', 'FB_METRODATA2':'FB_METRODATA2_IDX_num_meas', 'FB_METRODATA3':'FB_METRODATA3_IDX_num_meas'}
+    # parse FB_METRODATAx and FB_METRODATAx_IDX_num_meas to list of float.
+    for key in dic:
+        if key in new_df.columns.to_list():
+            new_df[key] = new_df[key].apply(lambda x: [float(i) for i in x.split(',') if i != '[NULL]'] if isinstance(x, str) else x)    
+            new_df[dic[key]] = new_df[dic[key]].apply(lambda x: [float(i) for i in x.split(',') if i != '[NULL]'] if isinstance(x, str) else x)
+    # calculate mean of metro data by num of measured wafers/sites. 
+    for row_index, row_data in new_df.iterrows():
+        for key in dic:
+            if key in new_df.columns.to_list():
+                # replace np.nan, [0], [np.nan] to np.nan
+                if row_data[key] in [np.nan, [0], [np.nan], '[NULL]']:
+                    new_df.loc[row_index, key] = np.nan
+                    continue
+                # replace np.nan, [0], [np.nan] to np.nan
+                if row_data[dic[key]] in [np.nan, [0], [np.nan], '[NULL]']:
+                    new_df.loc[row_index, key] = np.nan 
+                    continue
+                # calculate mean of metro data by num of measured wafers/sites.
+                if len(row_data[key]) > 1:
+                    res = []
+                    for i in range(len(row_data[dic[key]])):
+                        start = sum(row_data[dic[key]][:i])
+                        end = start + row_data[dic[key]][i]
+                        res.append(np.mean(row_data[key][start:end])) 
+                    new_df.at[row_index, key] = res
+    # dic ('FB_METRODATAx_slot':'FB_METRODATAx') that required to parse
+    dic_to_parse = {'FB_METRODATA_slot':'FB_METRODATA', 'FB_METRODATA2_slot':'FB_METRODATA2', 'FB_METRODATA3_slot':'FB_METRODATA3'}
+    # parse FB_METRODATAx_slot and FB_METRODATAx to list of int and list of float
+    for key, value in dic_to_parse.items():
+        if value in new_df.columns.to_list():
+            new_df[key] = new_df[key].apply(lambda x: x.split(',') if isinstance(x, str) else x)
+            new_df[value] = new_df[value].apply(lambda x: x.split(',') if isinstance(x, str) else x)
+            new_df[key] = new_df[key].apply(lambda x: [int(i) if i not in ['nan', '[NULL]', 'NaN', np.nan] else np.nan for i in x] if isinstance(x, list) else x) 
+            new_df[value] = new_df[value].apply(lambda x: [float(i) if i not in ['nan', '[NULL]', 'NaN', np.nan] else np.nan for i in x] if isinstance(x, list) else x)
+    # choose the correct value (for each wafer) based on MES slot of the wafer 
+    for row_index, row_data in new_df.iterrows():
+        for key in dic_to_parse:
+            if key in new_df.columns.to_list():
+                # replace np.nan, [0], [np.nan] to np.nan
+                if row_data[key] in [np.nan, [0], [np.nan], '[NULL]']:
+                    new_df.loc[row_index, key] = np.nan
+                    new_df.loc[row_index, dic_to_parse[key]] = np.nan
+                    continue
+                # replace 'list of values for all wfr' to the specific value of the wafer based on MES slot
+                for i in range(0, len(row_data[key])):
+                    if row_data[key][i] == int(row_data['MES_SLOTS']):
+                        new_df.loc[row_index, key] = row_data[key][i]
+                        new_df.loc[row_index, dic_to_parse[key]] = row_data[dic_to_parse[key]][i]
+                        break
+                # for wfrs not having metrology, set their FB_METRODATAx_slot and FB_METRODATAx to np.nan.
+                if '[' in str(new_df.at[row_index, dic_to_parse[key]]): 
+                    new_df.at[row_index, key] = np.nan 
+                    new_df.at[row_index, dic_to_parse[key]] = np.nan            
+    return new_df
+
+# Matching CHAMBER and SUBENTITY to remove redundant rows
+def match_chamber_to_subentity(new_df):
+    new_df['SUBENTITY_split'] = new_df['SUBENTITY'].str.split("_").str[-1]
+    new_df = new_df[(new_df['CHAMBER'] == new_df['SUBENTITY_split']) | (new_df['CHAMBER'].isna())]  
+    return new_df
+
+# Standardize RSTIME
+def convert_date_format(date):  
+    try:  
+        # Try to convert date from the first format  
+        dt = datetime.strptime(date, "%Y-%m-%d %H:%M:%SZ")  
+    except ValueError:  
+        try:  
+            # If the first format fails, try the second format  
+            dt = datetime.strptime(date, "%m/%d/%Y %I:%M:%S %p")  
+        except ValueError:  
+            # If both formats fail, return the original date  
+            return date    
+    # Convert the datetime object to the desired format  
+    return dt.strftime("%m/%d/%Y %I:%M:%S %p")
+
+
 output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/AEPC/"
 
     
@@ -161,11 +264,15 @@ custom_logger.info("Data Manipulation Starts")
 DF_pivot = PivotRawData(DF)
 LotData = create_df_batchid_waferid_lotdata(DF_pivot)
 LotWaferData = add_WAFERSx_ACT_data(LotData)
+LotWaferData = add_fb_metrodatax_data(LotWaferData)
+LotWaferData = process_fb_metrodatax_data(LotWaferData)
+LotWaferData = match_chamber_to_subentity(LotWaferData)
+LotWaferData.loc[:, 'RSTIME'] = LotWaferData['RSTIME'].apply(convert_date_format)
 custom_logger.info("Data Manipulation Finished")
 
 
 
-custom_logger.info("Raw data saved to Server")
+
 
 
 
