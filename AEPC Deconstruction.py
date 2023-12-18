@@ -59,7 +59,7 @@ def DataExtractFromXEUS():
         and ah.LOAD_DATE >= SYSDATE - :days_back
     '''
     
-        lotcursor = conn.execute(myQuery, days_back = 18)
+        lotcursor = conn.execute(myQuery, days_back = 60)
         field_name = [field[0] for field in lotcursor.description]
         #print("Query Completed...!")
         site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)   
@@ -123,11 +123,17 @@ def add_WAFERSx_ACT_data(new_df):
         if key in new_df.columns.to_list():
             new_df[key] = new_df[key].apply(lambda x: x.split(';') if isinstance(x, str) else x)
             new_df[value] = new_df[value].apply(lambda x: x.split(',') if isinstance(x, str) else x)
-            new_df[key] = new_df[key].apply(lambda x: [int(i) if i not in ['nan', '[NULL]', 'NONE'] else np.nan for i in x] if isinstance(x, list) else x) 
+            try:
+                new_df[key] = new_df[key].apply(lambda x: [int(i) if i not in ['nan', '[NULL]', 'NONE'] else np.nan for i in x] if isinstance(x, list) else x) 
+            except ValueError:
+                new_df[key] = 'Value Error Exception'
             if key == 'CHAMBER_IDX':
                 new_df[value] = new_df[value].apply(lambda x: [str(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
                 continue
-            new_df[value] = new_df[value].apply(lambda x: [float(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
+            try:
+                new_df[value] = new_df[value].apply(lambda x: [float(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
+            except ValueError:
+                new_df[value] = 'Value Error Exception'
     # choose the correct value (for each wafer) based on MES slot of the wafer 
     for row_index, row_data in new_df.iterrows():
         for key in dic_to_parse:
@@ -282,7 +288,7 @@ DF_pivot.to_csv(output_path+"AEPCPivot.csv", index = False)
 custom_logger.info("LVL Pivot data to Server Saved")
 
 
-custom_logger.info("Starting Save WVL data to Server")
+custom_logger.info("Starting Save WLV data to Server")
 LotData.to_csv(output_path+"AEPCLotData.csv", index = False)
 LotWaferData.to_csv(output_path+"AEPCLotWaferData.csv", index = False)
 custom_logger.info("WLV data to Server Saved")
