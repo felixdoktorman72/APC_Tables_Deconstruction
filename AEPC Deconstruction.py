@@ -10,6 +10,20 @@ import pandas as pd
 import numpy as np
 #from pathlib import Path
 import datetime
+import logging
+
+# Create a custom logger
+custom_logger = logging.getLogger("custom_logger")
+custom_logger.setLevel(logging.INFO)
+
+# Create a handler and set the formatter
+handler = logging.StreamHandler()
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+handler.setFormatter(formatter)
+
+
+# Add the handler to the logger
+custom_logger.addHandler(handler)
 
 
 def DataExtractFromXEUS():
@@ -17,8 +31,9 @@ def DataExtractFromXEUS():
     sites = ["F28_PROD_XEUS", "F32_PROD_XEUS"]
     combined_df = pd.DataFrame()
     for site in sites:
-        now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
-        print(f"Connecting to {site}  {now}")
+        #now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
+        #print(f"Connecting to {site}  {now}")
+        custom_logger.info(f"Connecing to {site}")
         conn = PyUber.connect(datasource=site)
 
         myQuery='''
@@ -40,15 +55,15 @@ def DataExtractFromXEUS():
                                                         ,'LAMBDA_PART_USED','PM_COUNTER_PRIOR','PM_COUNTER','REFERENCE_SETTING','M_ETCHRATE','METRO_LOLIMIT','METRO_HILIMIT'
                                                         ,'BATCH_ID','RSTIME','SHORTWAFERIDS','CHAMBER','CHAMBER_IDX','VALIDDATA','APC_DATA_ID','UPTIME','METROAVG_CHBR'
                                                         ,'MACHINE', 'MOMLOT', 'SMTIME', 'LAMBDA_TOOL','LAMBDA_PART') 
-        and ah.LOAD_DATE >= SYSDATE - 7
+        and ah.LOAD_DATE >= SYSDATE - 3
     '''
     
         lotcursor = conn.execute(myQuery)
         field_name = [field[0] for field in lotcursor.description]
-        print("Query Completed...!")
-        site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)
-   
-        combined_df = pd.concat([combined_df, site_df], axis = 0)           
+        #print("Query Completed...!")
+        site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)   
+        combined_df = pd.concat([combined_df, site_df], axis = 0)       
+        custom_logger.info(f"Data extract from {site} completed")
     return  combined_df
 
 def PivotRawData(df):
@@ -62,6 +77,7 @@ def PivotRawData(df):
    
    #We can remove all rows with UPTIME empty - eliminates empty chambers rows
    df_pivot = df_pivot.loc[df_pivot['UPTIME'] != '[NULL]']
+   df_pivot['BATCH_ID_SUBENTITY'] = df_pivot['BATCH_ID'] + "_" + df_pivot['SUBENTITY']     
    return df_pivot
    
 
@@ -99,20 +115,67 @@ def create_df_batchid_waferid_lotdata(df_pivot):
                 
     return new_df
 
-output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/"
+def add_WAFERSx_ACT_data(new_df):
+    #Adding WAFERSx_ACT
+    dic_to_parse = {'WAFERS3_ACT_IDX':'WAFERS3_ACT', 'WAFERS2_ACT_IDX':'WAFERS2_ACT','WAFERS1_ACT_IDX':'WAFERS1_ACT' , 'CHAMBER_IDX':'CHAMBER' }
+    for key, value in dic_to_parse.items():
+        if key in new_df.columns.to_list():
+            new_df[key] = new_df[key].apply(lambda x: x.split(';') if isinstance(x, str) else x)
+            new_df[value] = new_df[value].apply(lambda x: x.split(',') if isinstance(x, str) else x)
+            new_df[key] = new_df[key].apply(lambda x: [int(i) if i not in ['nan', '[NULL]', 'NONE'] else np.nan for i in x] if isinstance(x, list) else x) 
+            if key == 'CHAMBER_IDX':
+                new_df[value] = new_df[value].apply(lambda x: [str(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
+                continue
+            new_df[value] = new_df[value].apply(lambda x: [float(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
+    # choose the correct value (for each wafer) based on MES slot of the wafer 
+    for row_index, row_data in new_df.iterrows():
+        for key in dic_to_parse:
+            if key in new_df.columns.to_list():
+                # replace np.nan, [0], [np.nan] to np.nan
+                if row_data[key] in [np.nan, [0], [np.nan]]:
+                    new_df.loc[row_index, key] = np.nan
+                    new_df.loc[row_index, dic_to_parse[key]] = np.nan
+                    continue
+                # replace 'list of values for all wfr' to the specific value of the wafer based on MES slot
+                for i in range(0, len(row_data[key])):
+                    if row_data[key][i] == int(row_data['MES_SLOTS']):
+                        new_df.loc[row_index, key] = row_data[key][i]
+                        new_df.loc[row_index, dic_to_parse[key]] = row_data[dic_to_parse[key]][i]
+                        break
+                # for wfrs not having data, set to np.nan. 20231116
+                if '[' in str(new_df.at[row_index, dic_to_parse[key]]): 
+                    new_df.at[row_index, key] = np.nan 
+                    new_df.at[row_index, dic_to_parse[key]] = np.nan 
+    return new_df
+output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/AEPC/"
 
     
 ###### Real Time Data Extract ##################
 DF = DataExtractFromXEUS()
-#DF.to_csv(output_path+"RawExtractDataAEPC.csv", index = False)
-########################################################################################################################
+DF.to_csv(output_path+"RawExtractDataAEPC.csv", index = False)
+################################################################
 #DF = pd.read_csv(output_path+"RawExtractDataAEPC.csv")
 
+
+custom_logger.info("Data Manipulation Starts")
 DF_pivot = PivotRawData(DF)
 LotData = create_df_batchid_waferid_lotdata(DF_pivot)
+LotWaferData = add_WAFERSx_ACT_data(LotData)
+custom_logger.info("Data Manipulation Finished")
 
+
+
+custom_logger.info("Raw data saved to Server")
 
 
 
 #Save output for debug
+custom_logger.info("Starting Save LVL Pivot data to Server")
+DF_pivot.to_csv(output_path+"AEPCPivot.csv", index = False)
+custom_logger.info("LVL Pivot data to Server Saved")
+
+
+custom_logger.info("Starting Save WVL data to Server")
 LotData.to_csv(output_path+"AEPCLotData.csv", index = False)
+LotWaferData.to_csv(output_path+"AEPCLotWaferData.csv", index = False)
+custom_logger.info("WLV data to Server Saved")
