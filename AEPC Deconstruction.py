@@ -38,8 +38,9 @@ def DataExtractFromXEUS():
         conn = PyUber.connect(datasource=site)
 
         myQuery='''
-      select distinct ah.LOAD_DATE, fac.FACILITY ,ah.APC_OBJECT_NAME, ah.LOT, ah.OPERATION , ah.LOT_PROCESS,VARCHAR(ah.ONLINE_ROW_ID) as ONLINE_ROW_ID, 
-        ad.ATTRIBUTE_NAME, ad.ATTRIBUTE_VALUE
+      select distinct ah.LOAD_DATE, fac.FACILITY ,ah.APC_OBJECT_NAME, ah.LOT, ah.OPERATION ,
+      ah.LOT_PROCESS,VARCHAR(ah.ONLINE_ROW_ID) as ONLINE_ROW_ID, 
+      ad.ATTRIBUTE_NAME, ad.ATTRIBUTE_VALUE
         
         from P_APC_TXN_HIST  ah
         inner join P_APC_TXN_DATA ad on ad.APC_DATA_ID = ah.APC_DATA_ID
@@ -59,7 +60,7 @@ def DataExtractFromXEUS():
         and ah.LOAD_DATE >= SYSDATE - :days_back
     '''
     
-        lotcursor = conn.execute(myQuery, days_back = 60)
+        lotcursor = conn.execute(myQuery, days_back = 7)
         field_name = [field[0] for field in lotcursor.description]
         #print("Query Completed...!")
         site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)   
@@ -78,6 +79,8 @@ def PivotRawData(df):
    
    #We can remove all rows with UPTIME empty - eliminates empty chambers rows
    df_pivot = df_pivot.loc[df_pivot['UPTIME'] != '[NULL]']
+   #Need to debug EST
+   #df_pivot = df_pivot.loc[df_pivot['AREA'] != 'IONE']
    df_pivot['BATCH_ID_SUBENTITY'] = df_pivot['BATCH_ID'] + "_" + df_pivot['SUBENTITY']     
    return df_pivot
    
@@ -89,16 +92,22 @@ def create_df_batchid_waferid_lotdata(df_pivot):
     list_num_of_wfr = [len(i) for i in df_pivot['MES_SLOTS'].str.split(',')]
 
     list_lot_data = ['FB_METRODATA3_IDX', 'FB_METRODATA3', 'FB_METRODATA2_IDX', 'FB_METRODATA2', 'FB_METRODATA_IDX', 'FB_METRODATA', 'WAFERS3_ACT_IDX', 'WAFERS3_ACT', 'WAFERS2_ACT_IDX', 'WAFERS2_ACT', 'WAFERS1_ACT_IDX', 'WAFERS1_ACT', 'TARGET', 'METRO3AVGLOT', 'METRO2AVGLOT', 'METROAVGLOT', 'SETTING_USED', 'LOTSETTINGS', 'B_PART_RS', 'B_PART', 'B_PART_PRIOR', 'B_TOOL_RS', 'B_TOOL', 'B_TOOL_PRIOR', 'BATCH_ID_SUBENTITY', 'LAMBDA_TOOL', 'LAMBDA_PART', 'OPENRUNS', 'OPENRUNS_PART', 'SUBENTITY', 'PRODGROUP', 'PROCESS_OPN', 'APC_LOAD_DATE', 'PRODUCT', 'RSTIME', 'CHAMBER_IDX', 'CHAMBER', 'MACHINE', 'ROUTE', 'PROCESS', 'LOTID', 'AREA']
-    list_lot_data_to_split = ['TARGET', 'METRO3AVGLOT', 'METRO2AVGLOT', 'METROAVGLOT', 'SETTING_USED', 'B_PART_RS', 'B_PART', 'B_PART_PRIOR', 'B_TOOL_RS', 'B_TOOL', 'B_TOOL_PRIOR']  
+    list_lot_data_to_split = ['TARGET', 'METRO3AVGLOT', 'METRO2AVGLOT', 'METROAVGLOT', 'SETTING_USED', 'B_PART_RS', 'B_PART', 'B_PART_PRIOR']  
+    #list_lot_data_to_split = ['TARGET', 'METRO3AVGLOT', 'METRO2AVGLOT', 'METROAVGLOT', 'SETTING_USED', 'B_PART_RS', 'B_PART', 'B_PART_PRIOR', 'B_TOOL_RS', 'B_TOOL', 'B_TOOL_PRIOR']  
     list_lot_data_to_split_1 = ['LOTSETTINGS']
+    #separating columns with ";" separator
+    list_lot_data_to_split_2 = ['B_TOOL_PRIOR', 'B_TOOL', 'B_TOOL_RS']
     for i in list_lot_data: 
         if i in  df_pivot.columns.to_list():
-            # serilize lot level data to wafer level
+           # serilize lot level data to wafer level
            series_lot_data = df_pivot[i].repeat(list_num_of_wfr).reset_index(drop=True)
-            # concat 
+           # concat 
            new_df = pd.concat([series_lot_data, new_df], axis=1)
-           if i in list_lot_data_to_split:
-               df_splited_columns = new_df[i].str.split(',', expand=True)
+           if i in list_lot_data_to_split:               
+               try:
+                   df_splited_columns = new_df[i].str.split(',', expand=True)
+               except AttributeError:
+                   print("Attribute Error", i)
                df_splited_columns.columns = [f'{i}_{j + 1}' for j in range(df_splited_columns.shape[1])]
                 # place [NULL] to np.nan
                df_splited_columns = df_splited_columns.replace('[NULL]', np.nan)  
@@ -113,6 +122,16 @@ def create_df_batchid_waferid_lotdata(df_pivot):
                 df_splited_columns = df_splited_columns.replace('[NULL]', np.nan)  
             # concat
                 new_df = pd.concat([df_splited_columns, new_df], axis=1)    
+                #Added New Part                    
+           if i in list_lot_data_to_split_2:
+              # split to a tmp df
+                  df_splited_columns = new_df[i].str.split(';', expand=True)
+              # rename column (e.g., LOTSETTINGS_1, LOTSETTINGS_2, LOTSETTINGS_3)
+                  df_splited_columns.columns = [f'{i}_{j + 1}' for j in range(df_splited_columns.shape[1])]
+              # place [NULL] to np.nan
+                  df_splited_columns = df_splited_columns.replace('[NULL]', np.nan)  
+              # concat
+                  new_df = pd.concat([df_splited_columns, new_df], axis=1)   
                 
     return new_df
 
@@ -123,17 +142,21 @@ def add_WAFERSx_ACT_data(new_df):
         if key in new_df.columns.to_list():
             new_df[key] = new_df[key].apply(lambda x: x.split(';') if isinstance(x, str) else x)
             new_df[value] = new_df[value].apply(lambda x: x.split(',') if isinstance(x, str) else x)
-            try:
-                new_df[key] = new_df[key].apply(lambda x: [int(i) if i not in ['nan', '[NULL]', 'NONE'] else np.nan for i in x] if isinstance(x, list) else x) 
-            except ValueError:
-                new_df[key] = 'Value Error Exception'
-            if key == 'CHAMBER_IDX':
-                new_df[value] = new_df[value].apply(lambda x: [str(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
+            # try:
+            new_df[key] = new_df[key].apply(lambda x: [int(i) if i not in ['nan', '[NULL]', 'NONE'] else np.nan for i in x] if isinstance(x, list) else x) 
+            # except ValueError:                
+            #     custom_logger.info("Value Error in ACT key assignment")
+            #     custom_logger.debug("key is", key)
+            #     new_df[key] = 'Value Error Exception'
+            if key == 'CHAMBER_IDX':                
+                new_df[value] = new_df[value].apply(lambda x: [str(i) if i not in ['nan', '[NULL]', 'NONE'] else np.nan for i in x] if isinstance(x, list) else x)
                 continue
-            try:
-                new_df[value] = new_df[value].apply(lambda x: [float(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
-            except ValueError:
-                new_df[value] = 'Value Error Exception'
+            # try:                
+            new_df[value] = new_df[value].apply(lambda x: [float(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
+            # except ValueError:
+            #     custom_logger.info("Value Error in CHAMBER_IDX value assignment")
+            #     custom_logger.debug("key is", key)
+            #     #new_df[value] = 'Value Error Exception'
     # choose the correct value (for each wafer) based on MES slot of the wafer 
     for row_index, row_data in new_df.iterrows():
         for key in dic_to_parse:
@@ -234,12 +257,17 @@ def process_fb_metrodatax_data(new_df):
                     new_df.at[row_index, dic_to_parse[key]] = np.nan            
     return new_df
 
-# Matching CHAMBER and SUBENTITY to remove redundant rows
-def match_chamber_to_subentity(new_df):
-    new_df['SUBENTITY_split'] = new_df['SUBENTITY'].str.split("_").str[-1]
-    new_df = new_df[(new_df['CHAMBER'] == new_df['SUBENTITY_split']) | (new_df['CHAMBER'].isna())]  
-    return new_df
-
+# Matching CHAMBER and SUBENTITY to remove redundant rows and accomodate EST data
+def match_chamber_to_subentity(row):
+    list_len = len(row['SUBENTITY'].split("_"))    
+    if (list_len == 1):
+        try:
+            return row['MACHINE']+'_'+str(row['CHAMBER'])
+        except TypeError:
+            print("Type Error", row['MACHINE'], row['CHAMBER'])
+    elif (list_len == 2):
+        return row['SUBENTITY']
+   
 # Standardize RSTIME
 def convert_date_format(date):  
     try:  
@@ -261,7 +289,9 @@ output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_
     
 ###### Real Time Data Extract ##################
 DF = DataExtractFromXEUS()
+custom_logger.info("Raw Data Saving Starts")
 DF.to_csv(output_path+"RawExtractDataAEPC.csv", index = False)
+custom_logger.info("Raw Data Saving Finished")
 ################################################################
 #DF = pd.read_csv(output_path+"RawExtractDataAEPC.csv")
 
@@ -272,23 +302,26 @@ LotData = create_df_batchid_waferid_lotdata(DF_pivot)
 LotWaferData = add_WAFERSx_ACT_data(LotData)
 LotWaferData = add_fb_metrodatax_data(LotWaferData)
 LotWaferData = process_fb_metrodatax_data(LotWaferData)
-LotWaferData = match_chamber_to_subentity(LotWaferData)
+
+
+
+
+LotWaferData.loc[:,'SUBENTITY'] = LotWaferData.apply(lambda row:match_chamber_to_subentity(row),axis = 1 )
+
+
 LotWaferData.loc[:, 'RSTIME'] = LotWaferData['RSTIME'].apply(convert_date_format)
 custom_logger.info("Data Manipulation Finished")
 
 
-
-
-
-
-
-#Save output for debug
+# Save output for debug
 custom_logger.info("Starting Save LVL Pivot data to Server")
 DF_pivot.to_csv(output_path+"AEPCPivot.csv", index = False)
 custom_logger.info("LVL Pivot data to Server Saved")
 
 
-custom_logger.info("Starting Save WLV data to Server")
+custom_logger.info("Starting Save LVL data to Server")
 LotData.to_csv(output_path+"AEPCLotData.csv", index = False)
+custom_logger.info(" Saved LVL data to Server")
+custom_logger.info("Starting Save WLV data to Server")
 LotWaferData.to_csv(output_path+"AEPCLotWaferData.csv", index = False)
 custom_logger.info("WLV data to Server Saved")
