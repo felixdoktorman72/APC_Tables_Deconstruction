@@ -12,6 +12,9 @@ import numpy as np
 from datetime import datetime  
 from collections import Counter
 import logging
+import gc
+
+gc.collect()
 
 # Create a custom logger
 custom_logger = logging.getLogger("custom_logger")
@@ -60,7 +63,7 @@ def DataExtractFromXEUS():
         and ah.LOAD_DATE >= SYSDATE - :days_back
     '''
     
-        lotcursor = conn.execute(myQuery, days_back = 7)
+        lotcursor = conn.execute(myQuery, days_back = 60)
         field_name = [field[0] for field in lotcursor.description]
         #print("Query Completed...!")
         site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)   
@@ -79,8 +82,8 @@ def PivotRawData(df):
    
    #We can remove all rows with UPTIME empty - eliminates empty chambers rows
    df_pivot = df_pivot.loc[df_pivot['UPTIME'] != '[NULL]']
-   #Need to debug EST
-   #df_pivot = df_pivot.loc[df_pivot['AREA'] != 'IONE']
+   #Problematic lot for EST with leading zero
+   df_pivot = df_pivot.loc[df_pivot['LOT'] != 'N3415690']
    df_pivot['BATCH_ID_SUBENTITY'] = df_pivot['BATCH_ID'] + "_" + df_pivot['SUBENTITY']     
    return df_pivot
    
@@ -142,21 +145,21 @@ def add_WAFERSx_ACT_data(new_df):
         if key in new_df.columns.to_list():
             new_df[key] = new_df[key].apply(lambda x: x.split(';') if isinstance(x, str) else x)
             new_df[value] = new_df[value].apply(lambda x: x.split(',') if isinstance(x, str) else x)
-            # try:
-            new_df[key] = new_df[key].apply(lambda x: [int(i) if i not in ['nan', '[NULL]', 'NONE'] else np.nan for i in x] if isinstance(x, list) else x) 
-            # except ValueError:                
-            #     custom_logger.info("Value Error in ACT key assignment")
-            #     custom_logger.debug("key is", key)
-            #     new_df[key] = 'Value Error Exception'
+            try:
+                new_df[key] = new_df[key].apply(lambda x: [int(i) if i not in ['nan', '[NULL]', 'NONE'] else np.nan for i in x] if isinstance(x, list) else x) 
+            except ValueError:                
+                custom_logger.info("Value Error in ACT key assignment")
+                custom_logger.debug("key is", key)
+                new_df[key] = np.nan
             if key == 'CHAMBER_IDX':                
                 new_df[value] = new_df[value].apply(lambda x: [str(i) if i not in ['nan', '[NULL]', 'NONE'] else np.nan for i in x] if isinstance(x, list) else x)
                 continue
-            # try:                
-            new_df[value] = new_df[value].apply(lambda x: [float(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
-            # except ValueError:
-            #     custom_logger.info("Value Error in CHAMBER_IDX value assignment")
-            #     custom_logger.debug("key is", key)
-            #     #new_df[value] = 'Value Error Exception'
+            try:                
+                new_df[value] = new_df[value].apply(lambda x: [float(i) if i not in ['nan', '[NULL]'] else np.nan for i in x] if isinstance(x, list) else x)
+            except ValueError:
+                custom_logger.info("Value Error in CHAMBER_IDX value assignment")
+                custom_logger.debug("value is", value)
+                new_df[value] = np.nan
     # choose the correct value (for each wafer) based on MES slot of the wafer 
     for row_index, row_data in new_df.iterrows():
         for key in dic_to_parse:
@@ -289,39 +292,50 @@ output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_
     
 ###### Real Time Data Extract ##################
 DF = DataExtractFromXEUS()
-custom_logger.info("Raw Data Saving Starts")
-DF.to_csv(output_path+"RawExtractDataAEPC.csv", index = False)
-custom_logger.info("Raw Data Saving Finished")
+# custom_logger.info("Raw Data Saving Starts")
+# DF.to_csv(output_path+"RawExtractDataAEPC_60D.csv", index = False)
+# custom_logger.info("Raw Data Saving Finished")
 ################################################################
 #DF = pd.read_csv(output_path+"RawExtractDataAEPC.csv")
 
 
+
 custom_logger.info("Data Manipulation Starts")
 DF_pivot = PivotRawData(DF)
-LotData = create_df_batchid_waferid_lotdata(DF_pivot)
-LotWaferData = add_WAFERSx_ACT_data(LotData)
-LotWaferData = add_fb_metrodatax_data(LotWaferData)
-LotWaferData = process_fb_metrodatax_data(LotWaferData)
-
-
-
-
-LotWaferData.loc[:,'SUBENTITY'] = LotWaferData.apply(lambda row:match_chamber_to_subentity(row),axis = 1 )
-
-
-LotWaferData.loc[:, 'RSTIME'] = LotWaferData['RSTIME'].apply(convert_date_format)
-custom_logger.info("Data Manipulation Finished")
 
 
 # Save output for debug
 custom_logger.info("Starting Save LVL Pivot data to Server")
-DF_pivot.to_csv(output_path+"AEPCPivot.csv", index = False)
+DF_pivot.to_csv(output_path+"AEPCPivot_60D.csv", index = False)
+custom_logger.info("LVL Pivot data to Server Saved")
+
+
+LotData = create_df_batchid_waferid_lotdata(DF_pivot)
+LotWaferData = add_WAFERSx_ACT_data(LotData)
+LotWaferData = add_fb_metrodatax_data(LotWaferData)
+LotWaferData = process_fb_metrodatax_data(LotWaferData)
+LotWaferData.loc[:,'SUBENTITY'] = LotWaferData.apply(lambda row:match_chamber_to_subentity(row),axis = 1 )
+LotWaferData.loc[:, 'RSTIME'] = LotWaferData['RSTIME'].apply(convert_date_format)
+custom_logger.info("Data Manipulation Finished")
+
+
+#Save output for debug
+
+custom_logger.info("Saving WLV data to SD with Parquet")
+LotWaferData.to_parquet(output_path+"FAEPCLotWaferData_60D.parquet", index = False)
+custom_logger.info("Saving WLV data to SD with Parquet Completed")
+
+
+custom_logger.info("Starting Save LVL Pivot data to Server")
+DF_pivot.to_csv(output_path+"AEPCPivot_60D.csv", index = False)
 custom_logger.info("LVL Pivot data to Server Saved")
 
 
 custom_logger.info("Starting Save LVL data to Server")
-LotData.to_csv(output_path+"AEPCLotData.csv", index = False)
-custom_logger.info(" Saved LVL data to Server")
+LotData.to_csv(output_path+"AEPCLotData_60D.csv", index = False)
+custom_logger.info("Save LVL data to Server Completed")
+
 custom_logger.info("Starting Save WLV data to Server")
-LotWaferData.to_csv(output_path+"AEPCLotWaferData.csv", index = False)
-custom_logger.info("WLV data to Server Saved")
+LotWaferData.to_csv(output_path+"AEPCLotWaferData_60D.csv", index = False)
+custom_logger.info("WLV data to Server Save Completed")
+
