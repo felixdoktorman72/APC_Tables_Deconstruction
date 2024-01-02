@@ -32,7 +32,8 @@ custom_logger.addHandler(handler)
 
 def DataExtractFromXEUS():
     #Connection sites definition
-    sites = ["F28_PROD_XEUS", "F32_PROD_XEUS"]
+    sites = ["F28_PROD_XEUS", "F32_PROD_XEUS"] #Data extract sites
+    TimeFrame = 1 #Data Extract Timeframe in days
     combined_df = pd.DataFrame()
     for site in sites:
         #now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
@@ -63,7 +64,7 @@ def DataExtractFromXEUS():
         and ah.LOAD_DATE >= SYSDATE - :days_back
     '''
     
-        lotcursor = conn.execute(myQuery, days_back = 60)
+        lotcursor = conn.execute(myQuery, days_back = TimeFrame)
         field_name = [field[0] for field in lotcursor.description]
         #print("Query Completed...!")
         site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)   
@@ -304,12 +305,6 @@ custom_logger.info("Data Manipulation Starts")
 DF_pivot = PivotRawData(DF)
 
 
-# Save output for debug
-custom_logger.info("Starting Save LVL Pivot data to Server")
-DF_pivot.to_csv(output_path+"AEPCPivot_60D.csv", index = False)
-custom_logger.info("LVL Pivot data to Server Saved")
-
-
 LotData = create_df_batchid_waferid_lotdata(DF_pivot)
 LotWaferData = add_WAFERSx_ACT_data(LotData)
 LotWaferData = add_fb_metrodatax_data(LotWaferData)
@@ -322,20 +317,25 @@ custom_logger.info("Data Manipulation Finished")
 #Save output for debug
 
 custom_logger.info("Saving WLV data to SD with Parquet")
-LotWaferData.to_parquet(output_path+"FAEPCLotWaferData_60D.parquet", index = False)
+LotWaferData.to_parquet(output_path+"AEPCLotWaferData_Test.parquet", index = False)
 custom_logger.info("Saving WLV data to SD with Parquet Completed")
 
 
 custom_logger.info("Starting Save LVL Pivot data to Server")
-DF_pivot.to_csv(output_path+"AEPCPivot_60D.csv", index = False)
+DF_pivot.to_csv(output_path+"AEPCPivot_Test.csv", index = False)
 custom_logger.info("LVL Pivot data to Server Saved")
 
 
 custom_logger.info("Starting Save LVL data to Server")
-LotData.to_csv(output_path+"AEPCLotData_60D.csv", index = False)
+LotData.to_csv(output_path+"AEPCLotData_Test.csv", index = False)
 custom_logger.info("Save LVL data to Server Completed")
 
 custom_logger.info("Starting Save WLV data to Server")
-LotWaferData.to_csv(output_path+"AEPCLotWaferData_60D.csv", index = False)
+LotWaferData.to_csv(output_path+"AEPCLotWaferData_Test.csv", index = False)
 custom_logger.info("WLV data to Server Save Completed")
+
+custom_logger.info("Starting Save LVL Pivot data to Server")
+DF_pivot.to_csv(output_path+"AEPCPivot_Test.csv", index = False)
+custom_logger.info("LVL Pivot data to Server Saved")
+
 
