@@ -30,10 +30,11 @@ handler.setFormatter(formatter)
 custom_logger.addHandler(handler)
 
 
-def DataExtractFromXEUS():
+def DataExtractFromXEUS(sites_list, time_frame, apc_object_name):
     #Connection sites definition
-    sites = ["F28_PROD_XEUS", "F32_PROD_XEUS"] #Data extract sites
-    TimeFrame = 1 #Data Extract Timeframe in days
+    sites = sites_list #Data extract sites
+    TimeFrame = time_frame #Data Extract Timeframe in days
+    APC_OBJECT_NAME = apc_object_name
     combined_df = pd.DataFrame()
     for site in sites:
         #now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
@@ -50,7 +51,7 @@ def DataExtractFromXEUS():
         inner join P_APC_TXN_DATA ad on ad.APC_DATA_ID = ah.APC_DATA_ID
         CROSS JOIN F_FACILITY fac
           
-        where ah.APC_OBJECT_NAME = 'AEPC_LOT'
+        where ah.APC_OBJECT_NAME = :object_name
         and ah.APC_OBJECT_TYPE = 'LOT'
         and ah.LAST_VERSION_FLAG = 'Y'
         and ad.ATTRIBUTE_NAME In ('AREA','LOTID','ROUTE','PROCESS','OPERATION','MES_WAFER_IDS','MES_SLOTS','SLOTS','PROCESS_OPN','PRODGROUP','PRODUCT'
@@ -64,7 +65,7 @@ def DataExtractFromXEUS():
         and ah.LOAD_DATE >= SYSDATE - :days_back
     '''
     
-        lotcursor = conn.execute(myQuery, days_back = TimeFrame)
+        lotcursor = conn.execute(myQuery, days_back = TimeFrame, object_name = APC_OBJECT_NAME )
         field_name = [field[0] for field in lotcursor.description]
         #print("Query Completed...!")
         site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)   
@@ -292,7 +293,12 @@ output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_
 
     
 ###### Real Time Data Extract ##################
-DF = DataExtractFromXEUS()
+#input arguments for XEUS extract
+sites_list =  ["F28_PROD_XEUS", "F32_PROD_XEUS"]
+DaysBack = 60
+apc_object_name = 'AEPC_LOT'
+#XEUS extract
+DF = DataExtractFromXEUS(sites_list, DaysBack,apc_object_name)
 # custom_logger.info("Raw Data Saving Starts")
 # DF.to_csv(output_path+"RawExtractDataAEPC_60D.csv", index = False)
 # custom_logger.info("Raw Data Saving Finished")
