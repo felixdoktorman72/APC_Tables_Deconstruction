@@ -3,6 +3,13 @@
 Created on Sun Dec 17 09:37:05 2023
 
 @author: fdoktorm
+
+#####################################################################################
+# AEPC APC: AEPC_LOT table deconstruction to wafer level
+# Version 0 
+# 20240103
+# Authors: Felix Doktorman, Runshen Xu 
+#####################################################################################
 """
 
 import PyUber
