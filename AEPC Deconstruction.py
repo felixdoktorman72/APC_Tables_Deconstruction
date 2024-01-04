@@ -3,6 +3,13 @@
 Created on Sun Dec 17 09:37:05 2023
 
 @author: fdoktorm
+
+#####################################################################################
+# AEPC APC: AEPC_LOT table deconstruction to wafer level
+# Version 0 
+# 20240103
+# Authors: Felix Doktorman, Runshen Xu 
+#####################################################################################
 """
 
 import PyUber
@@ -30,10 +37,11 @@ handler.setFormatter(formatter)
 custom_logger.addHandler(handler)
 
 
-def DataExtractFromXEUS():
+def DataExtractFromXEUS(sites_list, time_frame, apc_object_name):
     #Connection sites definition
-    sites = ["F28_PROD_XEUS", "F32_PROD_XEUS"] #Data extract sites
-    TimeFrame = 1 #Data Extract Timeframe in days
+    sites = sites_list #Data extract sites
+    TimeFrame = time_frame #Data Extract Timeframe in days
+    APC_OBJECT_NAME = apc_object_name
     combined_df = pd.DataFrame()
     for site in sites:
         #now = datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")    
@@ -50,7 +58,7 @@ def DataExtractFromXEUS():
         inner join P_APC_TXN_DATA ad on ad.APC_DATA_ID = ah.APC_DATA_ID
         CROSS JOIN F_FACILITY fac
           
-        where ah.APC_OBJECT_NAME = 'AEPC_LOT'
+        where ah.APC_OBJECT_NAME = :object_name
         and ah.APC_OBJECT_TYPE = 'LOT'
         and ah.LAST_VERSION_FLAG = 'Y'
         and ad.ATTRIBUTE_NAME In ('AREA','LOTID','ROUTE','PROCESS','OPERATION','MES_WAFER_IDS','MES_SLOTS','SLOTS','PROCESS_OPN','PRODGROUP','PRODUCT'
@@ -64,7 +72,7 @@ def DataExtractFromXEUS():
         and ah.LOAD_DATE >= SYSDATE - :days_back
     '''
     
-        lotcursor = conn.execute(myQuery, days_back = TimeFrame)
+        lotcursor = conn.execute(myQuery, days_back = TimeFrame, object_name = APC_OBJECT_NAME )
         field_name = [field[0] for field in lotcursor.description]
         #print("Query Completed...!")
         site_df = pd.DataFrame(lotcursor.fetchall(), columns=field_name)   
@@ -287,12 +295,20 @@ def convert_date_format(date):
     # Convert the datetime object to the desired format  
     return dt.strftime("%m/%d/%Y %I:%M:%S %p")
 
-
+#Constants definition
 output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/AEPC/"
-
+WLV_Parquet = "AEPCLotWaferData_Test.parquet"
+Pivot_Table_for_Debug = "AEPCPivot_Test.csv"
+LVL_Csv = "AEPCLotData_Test.csv"
+WLV_Csv = "AEPCLotWaferData_Test.csv"
     
 ###### Real Time Data Extract ##################
-DF = DataExtractFromXEUS()
+#input arguments for XEUS extract
+sites_list =  ["F28_PROD_XEUS", "F32_PROD_XEUS"]
+DaysBack = 60
+apc_object_name = 'AEPC_LOT'
+#XEUS extract
+DF = DataExtractFromXEUS(sites_list, DaysBack, apc_object_name)
 # custom_logger.info("Raw Data Saving Starts")
 # DF.to_csv(output_path+"RawExtractDataAEPC_60D.csv", index = False)
 # custom_logger.info("Raw Data Saving Finished")
@@ -317,25 +333,25 @@ custom_logger.info("Data Manipulation Finished")
 #Save output for debug
 
 custom_logger.info("Saving WLV data to SD with Parquet")
-LotWaferData.to_parquet(output_path+"AEPCLotWaferData_Test.parquet", index = False)
+LotWaferData.to_parquet(output_path+WLV_Parquet, index = False)
 custom_logger.info("Saving WLV data to SD with Parquet Completed")
 
 
 custom_logger.info("Starting Save LVL Pivot data to Server")
-DF_pivot.to_csv(output_path+"AEPCPivot_Test.csv", index = False)
+DF_pivot.to_csv(output_path+Pivot_Table_for_Debug, index = False)
 custom_logger.info("LVL Pivot data to Server Saved")
 
 
 custom_logger.info("Starting Save LVL data to Server")
-LotData.to_csv(output_path+"AEPCLotData_Test.csv", index = False)
+LotData.to_csv(output_path+LVL_Csv, index = False)
 custom_logger.info("Save LVL data to Server Completed")
 
 custom_logger.info("Starting Save WLV data to Server")
-LotWaferData.to_csv(output_path+"AEPCLotWaferData_Test.csv", index = False)
+LotWaferData.to_csv(output_path+WLV_Csv, index = False)
 custom_logger.info("WLV data to Server Save Completed")
 
-custom_logger.info("Starting Save LVL Pivot data to Server")
-DF_pivot.to_csv(output_path+"AEPCPivot_Test.csv", index = False)
-custom_logger.info("LVL Pivot data to Server Saved")
+# custom_logger.info("Starting Save LVL Pivot data to Server")
+# DF_pivot.to_csv(output_path+"AEPCPivot_Test.csv", index = False)
+# custom_logger.info("LVL Pivot data to Server Saved")
 
 
