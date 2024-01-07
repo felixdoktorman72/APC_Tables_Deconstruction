@@ -295,9 +295,12 @@ def convert_date_format(date):
     # Convert the datetime object to the desired format  
     return dt.strftime("%m/%d/%Y %I:%M:%S %p")
 
-
+#Constants definition
 output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/AEPC/"
-
+WLV_Parquet = "AEPCLotWaferData_60DTest.parquet"
+Pivot_Table_for_Debug = "AEPCPivot_60DTest.csv"
+LVL_Csv = "AEPCLotData_60DTest.csv"
+WLV_Csv = "AEPCLotWaferData_60DTest.csv"
     
 ###### Real Time Data Extract ##################
 #input arguments for XEUS extract
@@ -305,7 +308,7 @@ sites_list =  ["F28_PROD_XEUS", "F32_PROD_XEUS"]
 DaysBack = 60
 apc_object_name = 'AEPC_LOT'
 #XEUS extract
-DF = DataExtractFromXEUS(sites_list, DaysBack,apc_object_name)
+DF = DataExtractFromXEUS(sites_list, DaysBack, apc_object_name)
 # custom_logger.info("Raw Data Saving Starts")
 # DF.to_csv(output_path+"RawExtractDataAEPC_60D.csv", index = False)
 # custom_logger.info("Raw Data Saving Finished")
@@ -330,25 +333,25 @@ custom_logger.info("Data Manipulation Finished")
 #Save output for debug
 
 custom_logger.info("Saving WLV data to SD with Parquet")
-LotWaferData.to_parquet(output_path+"AEPCLotWaferData_Test.parquet", index = False)
+LotWaferData.to_parquet(output_path+WLV_Parquet, index = False)
 custom_logger.info("Saving WLV data to SD with Parquet Completed")
 
 
 custom_logger.info("Starting Save LVL Pivot data to Server")
-DF_pivot.to_csv(output_path+"AEPCPivot_Test.csv", index = False)
+DF_pivot.to_csv(output_path+Pivot_Table_for_Debug, index = False)
 custom_logger.info("LVL Pivot data to Server Saved")
 
 
 custom_logger.info("Starting Save LVL data to Server")
-LotData.to_csv(output_path+"AEPCLotData_Test.csv", index = False)
+LotData.to_csv(output_path+LVL_Csv, index = False)
 custom_logger.info("Save LVL data to Server Completed")
 
 custom_logger.info("Starting Save WLV data to Server")
-LotWaferData.to_csv(output_path+"AEPCLotWaferData_Test.csv", index = False)
+LotWaferData.to_csv(output_path+WLV_Csv, index = False)
 custom_logger.info("WLV data to Server Save Completed")
 
-custom_logger.info("Starting Save LVL Pivot data to Server")
-DF_pivot.to_csv(output_path+"AEPCPivot_Test.csv", index = False)
-custom_logger.info("LVL Pivot data to Server Saved")
+# custom_logger.info("Starting Save LVL Pivot data to Server")
+# DF_pivot.to_csv(output_path+"AEPCPivot_Test.csv", index = False)
+# custom_logger.info("LVL Pivot data to Server Saved")
 
 

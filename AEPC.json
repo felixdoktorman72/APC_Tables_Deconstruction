@@ -1,0 +1,9 @@
+{
+    "apc_object_name": "AEPC_LOT",
+    "DaysBack": 60,
+    "LVL_Csv": "AEPCLotData_60DTest.csv",
+    "output_path": "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/AEPC/",
+    "Pivot_Table_for_Debug": "AEPCPivot_60DTest.csv",
+    "WLV_Csv": "AEPCLotWaferData_60DTest.csv",
+    "WLV_Parquet": "AEPCLotWaferData_60DTest.parquet"
+}
