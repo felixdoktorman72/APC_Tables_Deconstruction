@@ -20,6 +20,7 @@ from datetime import datetime
 from collections import Counter
 import logging
 import gc
+import json
 
 gc.collect()
 
@@ -295,23 +296,29 @@ def convert_date_format(date):
     # Convert the datetime object to the desired format  
     return dt.strftime("%m/%d/%Y %I:%M:%S %p")
 
+
+#location of configuration JSON file
+input_path = "//SHUser-Prod.intel.com/SHProdUser$/FDOKTORM/MSOA/APC UI Table Deconstruction/"
+with open (input_path+"AEPC.json") as f:
+    input_arguments = json.load(f)
+
+
 #Constants definition
-output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/AEPC/"
-WLV_Parquet = "AEPCLotWaferData_Test.parquet"
-Pivot_Table_for_Debug = "AEPCPivot_Test.csv"
-LVL_Csv = "AEPCLotData_Test.csv"
-WLV_Csv = "AEPCLotWaferData_Test.csv"
+output_path = input_arguments['output_path'] #"//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/AEPC/"
+WLV_Parquet = input_arguments['WLV_Parquet']# "AEPCLotWaferData_60DTest.parquet"
+Pivot_Table_for_Debug = input_arguments['Pivot_Table_for_Debug']#"AEPCPivot_60DTest.csv"
+LVL_Csv = input_arguments['LVL_Csv'] #"AEPCLotData_60DTest.csv"
+WLV_Csv = input_arguments['WLV_Csv'] #"AEPCLotWaferData_60DTest.csv"
+
     
 ###### Real Time Data Extract ##################
 #input arguments for XEUS extract
-sites_list =  ["F28_PROD_XEUS", "F32_PROD_XEUS"]
-DaysBack = 60
-apc_object_name = 'AEPC_LOT'
+sites_list =  input_arguments['sites_list']#["F28_PROD_XEUS", "F32_PROD_XEUS"]
+DaysBack = input_arguments['DaysBack']
+apc_object_name = input_arguments['apc_object_name']#'AEPC_LOT'
 #XEUS extract
 
-DF = DataExtractFromXEUS(sites_list, DaysBack,apc_object_name)
-
-
+DF = DataExtractFromXEUS(sites_list, DaysBack, apc_object_name)
 # custom_logger.info("Raw Data Saving Starts")
 # DF.to_csv(output_path+"RawExtractDataAEPC_60D.csv", index = False)
 # custom_logger.info("Raw Data Saving Finished")
