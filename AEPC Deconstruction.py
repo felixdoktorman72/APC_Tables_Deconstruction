@@ -308,7 +308,10 @@ sites_list =  ["F28_PROD_XEUS", "F32_PROD_XEUS"]
 DaysBack = 60
 apc_object_name = 'AEPC_LOT'
 #XEUS extract
-DF = DataExtractFromXEUS(sites_list, DaysBack, apc_object_name)
+
+DF = DataExtractFromXEUS(sites_list, DaysBack,apc_object_name)
+
+
 # custom_logger.info("Raw Data Saving Starts")
 # DF.to_csv(output_path+"RawExtractDataAEPC_60D.csv", index = False)
 # custom_logger.info("Raw Data Saving Finished")
