@@ -20,6 +20,7 @@ from datetime import datetime
 from collections import Counter
 import logging
 import gc
+import json
 
 gc.collect()
 
@@ -294,6 +295,10 @@ def convert_date_format(date):
             return date    
     # Convert the datetime object to the desired format  
     return dt.strftime("%m/%d/%Y %I:%M:%S %p")
+
+with open ("AEPC.json") as f:
+    input_arguments = json.load(f)
+
 
 #Constants definition
 output_path = "//ORshfs.intel.com/ORanalysis$/1274_MAODATA/GAJT/WIJT/ByPath/GER_fdoktorm/DeconstructionTest/AEPC/"
